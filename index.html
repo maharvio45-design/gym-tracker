@@ -77,6 +77,10 @@ label{display:block;margin-top:8px}
 .empty{padding:14px;text-align:center;color:var(--mut)}
 .toast{position:fixed;left:16px;right:16px;bottom:92px;max-width:528px;margin:auto;background:var(--ink);color:#fff;padding:12px 14px;border-radius:14px;z-index:20;box-shadow:0 8px 30px #0002}
 .smallbtn{padding:7px 10px;font-size:13px}
+
+.wtimer{display:inline-flex;align-items:center;gap:7px;background:#ffffff24;color:#fff;border-radius:99px;padding:6px 11px;font-weight:700;font-size:14px;letter-spacing:.2px}
+.wtimer i{width:8px;height:8px;border-radius:50%;background:#fff;display:inline-block;box-shadow:0 0 0 3px #ffffff22}
+.wtimer.paused i{opacity:.45}
 </style>
 </head>
 <body>
@@ -560,6 +564,27 @@ function chart(pts,u){
 
 const tile=(k,v,c='')=>`<div class="card ${c}"><div class="k">${k}</div><div class="big">${v}</div></div>`;
 
+
+function fmtTime(sec){
+ sec=Math.max(0,Math.floor(sec||0));
+ const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
+ return (h?String(h).padStart(2,'0')+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+function activeElapsed(){
+ const a=S.active;
+ if(!a||!a.start)return 0;
+ return Math.max(0,Math.floor((Date.now()-a.start)/1000));
+}
+function refreshWorkoutTimer(){
+ const el=$('#workoutTimer');
+ if(el&&S.active) el.textContent=fmtTime(activeElapsed());
+}
+function timerLoop(){
+ refreshWorkoutTimer();
+ setTimeout(timerLoop,1000);
+}
+timerLoop();
+
 /* ---------- Views ---------- */
 function dash(){
   const w=bs('w');
@@ -984,6 +1009,27 @@ function cancelWorkout(){
 }
 
 /* Compare the new workout against the best records BEFORE this workout. */
+
+function confirmFinishWorkout(){
+ dialog({
+  title:'Selesaikan workout?',
+  body:`Workout <b>${esc(S.active?.type||'')}</b> akan disimpan ke History.`,
+  ok:'Finish Workout',
+  cancel:'Kembali',
+  onOk:()=>finish()
+ });
+}
+function confirmCancelWorkout(){
+ dialog({
+  title:'Batalkan workout?',
+  body:'Semua set yang sudah kamu isi pada workout ini akan dibuang dan tidak masuk ke History.',
+  ok:'Ya, Batalkan',
+  cancel:'Lanjut Workout',
+  danger:true,
+  onOk:()=>{S.active=null;save();render()}
+ });
+}
+
 function finish(){
   const a=S.active;
   const exs=a.ex
