@@ -58,6 +58,22 @@ nav button.on{background:#ffffff24;color:#fff}
 .pr{background:#FFF4CC;border:1px solid #F5B700;color:#6b5000;font-weight:600}
 .t5{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}.t5 button{background:var(--tc);font:700 22px 'Barlow Condensed',sans-serif;padding:20px;border-radius:18px}.t5 button:first-child{grid-column:span 2}
 label{display:block;margin-top:8px}
+/* ---------- Custom dialogs ---------- */
+.dialog-backdrop{position:fixed;inset:0;background:rgba(20,18,43,.58);display:flex;align-items:flex-end;justify-content:center;z-index:50;padding:14px}
+.dialog{width:100%;max-width:560px;background:var(--card);border-radius:24px;padding:20px;box-shadow:0 18px 60px #0004;animation:dialogIn .18s ease-out}
+@keyframes dialogIn{from{transform:translateY(18px);opacity:0}to{transform:translateY(0);opacity:1}}
+.dialog h3{font:700 26px 'Barlow Condensed',sans-serif;margin-bottom:5px}
+.dialog .dialog-sub{color:var(--mut);font-size:13px;margin-bottom:14px}
+.dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.dialog-actions button{padding:13px 12px}
+.dialog-actions .cancel{background:var(--soft);color:var(--ink)}
+.dialog-actions .danger{background:var(--er)}
+.dialog-actions .primary{background:var(--ac)}
+.tpl-tools{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 10px}
+.tpl-tools button{flex:1;min-width:110px}
+.tpl-tools .secondary{background:var(--soft);color:var(--ink)}
+.tpl-list{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tpl-empty{padding:12px;border:1px dashed var(--ln);border-radius:14px;color:var(--mut);text-align:center}
 .empty{padding:14px;text-align:center;color:var(--mut)}
 .toast{position:fixed;left:16px;right:16px;bottom:92px;max-width:528px;margin:auto;background:var(--ink);color:#fff;padding:12px 14px;border-radius:14px;z-index:20;box-shadow:0 8px 30px #0002}
 .smallbtn{padding:7px 10px;font-size:13px}
@@ -102,6 +118,43 @@ const fmt=n=>(Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:0});
 const pad=n=>String(n).padStart(2,'0');
 const slug=n=>String(n).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- Native-dialog replacement ---------- */
+function closeDialog(){const r=$('#dialogRoot');if(r)r.innerHTML=''}
+function dialogShell(title,sub,body,actions){
+  const r=$('#dialogRoot');
+  if(!r)return;
+  r.innerHTML=`<div class="dialog-backdrop" id="appDialogBackdrop">
+    <div class="dialog" role="dialog" aria-modal="true">
+      <h3>${esc(title)}</h3>
+      ${sub?`<div class="dialog-sub">${esc(sub)}</div>`:''}
+      ${body}
+      <div class="dialog-actions">${actions}</div>
+    </div>
+  </div>`;
+  const b=$('#appDialogBackdrop');
+  if(b)b.addEventListener('click',e=>{if(e.target===b)closeDialog()});
+}
+function uiAlert(message,title='Gym Log'){
+  dialogShell(title,'',`<div style="font-size:15px;white-space:pre-line">${esc(message)}</div>`,`<button class="cancel" onclick="closeDialog()">OK</button><button class="primary" onclick="closeDialog()">Mengerti</button>`);
+}
+function uiConfirm(message,onOk,title='Konfirmasi'){
+  dialogShell(title,'',`<div style="font-size:15px;white-space:pre-line">${esc(message)}</div>`,`<button class="cancel" onclick="closeDialog()">Batal</button><button class="danger" onclick="closeDialog();(${onOk.toString()})()">Lanjutkan</button>`);
+}
+function uiPrompt(title,sub,value,onOk,placeholder='Ketik di sini…'){
+  dialogShell(title,sub,`<label class="k">Nama</label><input id="dialogInput" value="${esc(value||'')}" placeholder="${esc(placeholder)}" autocomplete="off">`,`<button class="cancel" onclick="closeDialog()">Batal</button><button class="primary" onclick="dialogSubmit()">Simpan</button>`);
+  window.__dialogSubmit=onOk;
+  setTimeout(()=>{const i=$('#dialogInput');if(i){i.focus();i.select();i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();dialogSubmit()}})}},20);
+}
+function dialogSubmit(){
+  const i=$('#dialogInput');
+  const v=i?i.value.trim():'';
+  if(!v)return;
+  const fn=window.__dialogSubmit;
+  window.__dialogSubmit=null;
+  closeDialog();
+  if(fn)fn(v);
+}
 const today=()=>iso(new Date());
 
 /* ---------- Robust date handling ---------- */
@@ -183,11 +236,6 @@ let hf={t:'',m:monthKey(today())};
 let pe='';
 let syncing=false;
 let stat='off';
-
-// Upgrade/migrate templates so old saved data can use the new template editor.
-TYPES.forEach(t=>{if(!S.tpl[t])S.tpl[t]=[...(DEF_TPL[t]||[])];});
-if(!S.tpl[tplT])tplT=Object.keys(S.tpl)[0]||TYPES[0];
-save();
 
 function defaultState(){
   return {
@@ -333,11 +381,11 @@ function normalizeBodyRow(r){
 }
 
 async function pull(){
-  if(!S.url)return alert('Masukkan URL Web App terlebih dahulu.');
+  if(!S.url){uiAlert('Masukkan URL Web App terlebih dahulu.','Google Sheets');return;}
 
   await sync();
   if(S.q.length){
-    alert('Masih ada data yang belum terkirim. Pastikan status 🟢 Synced lalu coba lagi.');
+    uiAlert('Masih ada data yang belum terkirim. Pastikan status 🟢 Synced lalu coba lagi.','Sync belum selesai');
     return;
   }
 
@@ -384,7 +432,7 @@ async function pull(){
   }catch(e){
     console.error(e);
     setSt('err');
-    alert('Gagal menarik data dari Sheets.\n\n'+e.message);
+    uiAlert('Gagal menarik data dari Sheets.\n\n'+e.message,'Gagal menarik data');
   }
 }
 
@@ -544,90 +592,34 @@ function dash(){
     <div class="card"><div class="k">Grafik lingkar pinggang</div>${chart(wa.map(b=>({v:b.waist})),' cm')}</div>`;
 }
 
-function templateNames(){
-  return Object.keys(S.tpl||{}).filter(n=>String(n).trim());
-}
-
-function selectTpl(name){
-  if(!S.tpl[name])return;
-  tplT=name;
-  save();
-  render();
-}
-
-function newTemplate(){
-  const raw=prompt('Nama template baru:');
-  if(raw===null)return;
-  const name=raw.trim();
-  if(!name)return alert('Nama template tidak boleh kosong.');
-  if(S.tpl[name])return alert('Template dengan nama itu sudah ada.');
-  S.tpl[name]=[];
-  tplT=name;
-  save();
-  render();
-}
-
-function renameTemplate(){
-  const old=tplT;
-  if(!S.tpl[old])return;
-  const raw=prompt('Nama baru untuk template:',old);
-  if(raw===null)return;
-  const name=raw.trim();
-  if(!name||name===old)return;
-  if(S.tpl[name])return alert('Nama template sudah dipakai.');
-  S.tpl[name]=S.tpl[old];
-  delete S.tpl[old];
-  tplT=name;
-  save();
-  render();
-}
-
-function deleteTemplate(){
-  const names=templateNames();
-  if(names.length<=1)return alert('Minimal harus ada satu template.');
-  if(!S.tpl[tplT])return;
-  if(!confirm(`Hapus template "${tplT}"? Exercise di library tetap aman.`))return;
-  delete S.tpl[tplT];
-  tplT=templateNames()[0]||'';
-  save();
-  render();
-}
+function customTemplates(){return Object.keys(S.tpl).filter(t=>!TYPES.includes(t));}
 
 function workout(){
   if(S.active)return act();
-  const names=templateNames();
-  if(!S.tpl[tplT])tplT=names[0]||'';
   const l=S.tpl[tplT]||[];
-
+  const customs=customTemplates();
   return `
     <h2>Pilih workout</h2>
-    <div class="t5">${TYPES.map(t=>`<button type="button" data-t="${esc(t)}" onclick="start(${JSON.stringify(t)})">${esc(t)}</button>`).join('')}</div>
-
-    <div class="card" style="margin-top:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <div><div class="k">TEMPLATE</div><b>${esc(tplT||'Belum ada')}</b></div>
-        <button type="button" onclick="newTemplate()">+ Template</button>
-      </div>
-      <div class="chips" style="margin-bottom:0">
-        ${names.map(t=>`<button type="button" data-tpl="${esc(t)}" class="chip ${t===tplT?'on':''}" onclick="selectTpl(this.dataset.tpl)">${esc(t)}</button>`).join('')}
-      </div>
+    <div class="t5">${TYPES.map(t=>`<button data-t="${esc(t)}" onclick="start('${esc(t)}')">${esc(t)}</button>`).join('')}</div>
+    <h2>Template</h2>
+    <div class="tpl-tools">
+      <button class="primary" style="background:var(--ac)" onclick="tplNew()">＋ Template Baru</button>
+      ${!TYPES.includes(tplT)?`<button class="secondary" onclick="tplRename()">✎ Rename</button><button class="secondary" onclick="tplDelete()">🗑 Hapus</button>`:''}
     </div>
-
+    <div class="tpl-list">
+      ${TYPES.map(t=>`<button data-t="${esc(t)}" class="chip ${t===tplT?'on':''}" onclick="tplT='${esc(t)}';render()">${esc(t)}</button>`).join('')}
+      ${customs.map(t=>`<button class="chip ${t===tplT?'on':''}" onclick="tplT='${esc(t)}';render()">${esc(t)}</button>`).join('')}
+    </div>
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
-        <div><b>${esc(tplT)}</b><div class="mut">${l.length} exercise</div></div>
-        <div style="display:flex;gap:4px">
-          <button type="button" class="x" title="Rename" onclick="renameTemplate()">✎</button>
-          <button type="button" class="x" title="Hapus" onclick="deleteTemplate()">🗑</button>
-        </div>
-      </div>
-      ${l.map((e,i)=>`<div class="row"><span>${esc(e)}</span><button type="button" class="x" onclick="tplRm(${i})">×</button></div>`).join('')||'<p class="mut">Template kosong. Tambahkan exercise di bawah.</p>'}
-      <div style="display:flex;gap:6px;margin-top:10px">
+      <div class="row"><b>${esc(tplT)}</b><span class="mut">${l.length} exercise</span></div>
+      ${l.map((e,i)=>`<div class="row"><span>${esc(e)}</span><button class="x" onclick="tplRm(${i})" aria-label="Hapus exercise">×</button></div>`).join('')||'<div class="tpl-empty">Template ini belum punya exercise.</div>'}
+      <div style="display:flex;gap:6px;margin-top:8px">
         <input id="tn" list="dl" placeholder="Tambah exercise ke ${esc(tplT)}" onkeydown="if(event.key==='Enter'){event.preventDefault();tplAdd()}">
-        <button type="button" onclick="tplAdd()">Tambah</button>
+        <button onclick="tplAdd()">Tambah</button>
       </div>
     </div>`;
 }
+
 function act(){
   const a=S.active;
   return `
@@ -661,7 +653,7 @@ function act(){
 
     <input placeholder="Catatan workout (opsional)" value="${esc(a.notes)}" oninput="S.active.notes=this.value;save()" style="margin-bottom:10px">
     <button class="pri fin" onclick="finish()">Finish Workout</button>
-    <button class="x" style="width:100%" onclick="if(confirm('Batalkan workout ini?')){S.active=null;save();render()}">Batalkan workout</button>`;
+    <button class="x" style="width:100%" onclick="cancelWorkout()">Batalkan workout</button>`;
 }
 
 function hist(){
@@ -848,26 +840,65 @@ function up(i,j,k,v){
   if(el)el.textContent=vol(S.active.ex[i].sets[j]);
 }
 
+function tplNew(){
+  uiPrompt('Template Baru','Buat template workout yang bisa kamu gunakan kapan saja.','',name=>{
+    if(TYPES.some(t=>t.toLowerCase()===name.toLowerCase())||customTemplates().some(t=>t.toLowerCase()===name.toLowerCase())){
+      uiAlert('Nama template sudah digunakan. Pilih nama lain.','Template sudah ada');
+      return;
+    }
+    S.tpl[name]=[];
+    tplT=name;
+    save();
+    render();
+  },'Contoh: FULL BODY');
+}
+
+function tplRename(){
+  if(TYPES.includes(tplT))return uiAlert('Template bawaan tidak bisa di-rename. Buat template baru jika ingin nama sendiri.');
+  const old=tplT;
+  uiPrompt('Rename Template','Ganti nama template ini.',old,name=>{
+    if(name===old)return;
+    if(S.tpl[name]||TYPES.some(t=>t.toLowerCase()===name.toLowerCase()))return uiAlert('Nama template sudah digunakan.');
+    S.tpl[name]=S.tpl[old]||[];
+    delete S.tpl[old];
+    tplT=name;
+    save();
+    render();
+  },'Nama template');
+}
+
+function tplDelete(){
+  if(TYPES.includes(tplT))return uiAlert('Template bawaan tidak bisa dihapus.');
+  const old=tplT;
+  uiConfirm(`Hapus template "${old}"? Exercise di template ini juga akan dihapus dari template, tetapi riwayat workout tidak akan terhapus.`,()=>{
+    delete S.tpl[old];
+    tplT=TYPES[0];
+    save();
+    render();
+  },'Hapus Template');
+}
+
 function tplAdd(){
   const el=$('#tn');
-  if(!el||!tplT)return;
+  if(!el)return;
   const v=el.value.trim();
   if(!v)return;
   S.tpl[tplT]=S.tpl[tplT]||[];
-  if(S.tpl[tplT].some(x=>x.toLowerCase()===v.toLowerCase())){
-    el.value='';
-    return alert('Exercise itu sudah ada di template.');
+  if(!S.tpl[tplT].some(x=>x.toLowerCase()===v.toLowerCase())){
+    S.tpl[tplT].push(ensureEx(v));
   }
-  S.tpl[tplT].push(ensureEx(v));
   save();
   render();
 }
 
 function tplRm(i){
-  if(!S.tpl[tplT])return;
   S.tpl[tplT].splice(i,1);
   save();
   render();
+}
+
+function cancelWorkout(){
+  uiConfirm('Workout yang sedang berjalan akan dibatalkan. Data yang sudah kamu isi di workout ini tidak akan disimpan.',()=>{S.active=null;save();render()},'Batalkan Workout');
 }
 
 /* Compare the new workout against the best records BEFORE this workout. */
@@ -877,7 +908,7 @@ function finish(){
     .map(e=>({...e,sets:e.sets.filter(s=>Number(s.w)>0&&Number(s.r)>0)}))
     .filter(e=>e.sets.length);
 
-  if(!exs.length)return alert('Isi minimal satu set (berat dan reps).');
+  if(!exs.length){uiAlert('Isi minimal satu set dengan berat dan reps sebelum menyelesaikan workout.','Workout belum lengkap');return;}
 
   const wid=newWid();
   const dur=Math.max(1,Math.round((Date.now()-a.start)/60000));
@@ -983,7 +1014,7 @@ function saveBody(){
   };
 
   if(!d||(r.w===''&&r.waist==='')){
-    return alert('Isi tanggal dan minimal berat atau pinggang.');
+    uiAlert('Isi tanggal dan minimal berat atau pinggang.','Data body belum lengkap');return;
   }
 
   S.body=S.body.filter(b=>dateOnly(b.date)!==d);
@@ -1032,3 +1063,4 @@ sync();
 </script>
 </body>
 </html>
+
