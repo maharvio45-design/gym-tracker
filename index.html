@@ -77,10 +77,8 @@ label{display:block;margin-top:8px}
 .empty{padding:14px;text-align:center;color:var(--mut)}
 .toast{position:fixed;left:16px;right:16px;bottom:92px;max-width:528px;margin:auto;background:var(--ink);color:#fff;padding:12px 14px;border-radius:14px;z-index:20;box-shadow:0 8px 30px #0002}
 .smallbtn{padding:7px 10px;font-size:13px}
-
-.wtimer{display:inline-flex;align-items:center;gap:7px;background:#ffffff24;color:#fff;border-radius:99px;padding:6px 11px;font-weight:700;font-size:14px;letter-spacing:.2px}
+.wtimer{display:inline-flex;align-items:center;gap:7px;background:#ffffff24;color:#fff;border-radius:99px;padding:7px 12px;font-weight:700;font-size:15px;letter-spacing:.3px}
 .wtimer i{width:8px;height:8px;border-radius:50%;background:#fff;display:inline-block;box-shadow:0 0 0 3px #ffffff22}
-.wtimer.paused i{opacity:.45}
 </style>
 </head>
 <body>
@@ -566,24 +564,22 @@ const tile=(k,v,c='')=>`<div class="card ${c}"><div class="k">${k}</div><div cla
 
 
 function fmtTime(sec){
- sec=Math.max(0,Math.floor(sec||0));
- const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
- return (h?String(h).padStart(2,'0')+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  sec=Math.max(0,Math.floor(Number(sec)||0));
+  const h=Math.floor(sec/3600);
+  const m=Math.floor((sec%3600)/60);
+  const s=sec%60;
+  return (h?String(h).padStart(2,'0')+':':'')+
+         String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
 }
 function activeElapsed(){
- const a=S.active;
- if(!a||!a.start)return 0;
- return Math.max(0,Math.floor((Date.now()-a.start)/1000));
+  if(!S.active||!S.active.start)return 0;
+  return Math.max(0,Math.floor((Date.now()-Number(S.active.start))/1000));
 }
 function refreshWorkoutTimer(){
- const el=$('#workoutTimer');
- if(el&&S.active) el.textContent=fmtTime(activeElapsed());
+  const el=$('#workoutTimer');
+  if(el&&S.active)el.textContent=fmtTime(activeElapsed());
 }
-function timerLoop(){
- refreshWorkoutTimer();
- setTimeout(timerLoop,1000);
-}
-timerLoop();
+setInterval(refreshWorkoutTimer,1000);
 
 /* ---------- Views ---------- */
 function dash(){
@@ -629,7 +625,7 @@ function dash(){
       <div class="k">Minggu ini</div>
       <div class="big">${inW.length}<small>workout</small></div>
       <div class="wk">${wd}</div>
-      <button class="go" onclick="tab='workout';render()">${S.active?'Lanjutkan '+esc(S.active.type):'Start Workout'}</button>
+      <button class="go" onclick="tab='workout';render()">${S.active?'Lanjutkan '+esc(S.active.type)+' · '+fmtTime(activeElapsed()):'Start Workout'}</button>
     </div>
     <div class="grid">
       ${tile('Berat badan',lw?lw.w+' kg':'–')}
@@ -712,7 +708,16 @@ function workout(){
 function act(){
   const a=S.active;
   return `
-    <div class="ah" data-t="${esc(a.type)}"><div class="big">${esc(a.type)}</div><div>${fd(a.date)}</div></div>
+    <div class="ah" data-t="${esc(a.type)}">
+      <div>
+        <div class="big">${esc(a.type)}</div>
+        <div>${fd(a.date)}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="wtimer" id="workoutTimer"><i></i><span>${fmtTime(activeElapsed())}</span></div>
+        <div style="font-size:11px;color:#fff9;margin-top:4px">durasi workout</div>
+      </div>
+    </div>
     ${a.ex.map((e,i)=>`
       <div class="card">
         <b>${esc(e.name)}</b>
@@ -741,8 +746,8 @@ function act(){
     </div>
 
     <input placeholder="Catatan workout (opsional)" value="${esc(a.notes)}" oninput="S.active.notes=this.value;save()" style="margin-bottom:10px">
-    <button class="pri fin" onclick="finish()">Finish Workout</button>
-    <button class="x" style="width:100%" onclick="cancelWorkout()">Batalkan workout</button>`;
+    <button class="pri fin" onclick="confirmFinishWorkout()">Finish Workout</button>
+    <button class="x" style="width:100%" onclick="confirmCancelWorkout()">Batalkan workout</button>`;
 }
 
 function hist(){
@@ -1011,23 +1016,22 @@ function cancelWorkout(){
 /* Compare the new workout against the best records BEFORE this workout. */
 
 function confirmFinishWorkout(){
- dialog({
-  title:'Selesaikan workout?',
-  body:`Workout <b>${esc(S.active?.type||'')}</b> akan disimpan ke History.`,
-  ok:'Finish Workout',
-  cancel:'Kembali',
-  onOk:()=>finish()
- });
+  uiConfirm(
+    `Workout ${S.active?S.active.type:''} akan disimpan ke History.`,
+    ()=>finish(),
+    'Selesaikan workout?'
+  );
 }
 function confirmCancelWorkout(){
- dialog({
-  title:'Batalkan workout?',
-  body:'Semua set yang sudah kamu isi pada workout ini akan dibuang dan tidak masuk ke History.',
-  ok:'Ya, Batalkan',
-  cancel:'Lanjut Workout',
-  danger:true,
-  onOk:()=>{S.active=null;save();render()}
- });
+  uiConfirm(
+    'Semua set yang sudah kamu isi pada workout ini akan dibuang dan tidak masuk ke History.',
+    ()=>{
+      S.active=null;
+      save();
+      render();
+    },
+    'Batalkan workout?'
+  );
 }
 
 function finish(){
