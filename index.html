@@ -541,20 +541,60 @@ function dash(){
 
 function workout(){
   if(S.active)return act();
+  const names=tplList();
+  if(!names.includes(tplT))tplT=names[0]||'';
   const l=S.tpl[tplT]||[];
-
   return `
-    <h2>Pilih workout</h2>
-    <div class="t5">${TYPES.map(t=>`<button data-t="${t}" onclick="start('${t}')">${t}</button>`).join('')}</div>
-    <h2>Template</h2>
-    <div class="chips">${TYPES.map(t=>`<button data-t="${t}" class="chip ${t===tplT?'on':''}" onclick="tplT='${t}';render()">${t}</button>`).join('')}</div>
+    <h2>Workout</h2>
+    <div class="t5">${names.map(t=>`<button data-t="${esc(t)}" onclick="start('${slug(t)}')">${esc(t)}</button>`).join('')}</div>
     <div class="card">
-      ${l.map((e,i)=>`<div class="row"><span>${esc(e)}</span><button class="x" onclick="tplRm(${i})">×</button></div>`).join('')||'<p class="mut">Template kosong.</p>'}
-      <div style="display:flex;gap:6px;margin-top:8px">
-        <input id="tn" list="dl" placeholder="Tambah exercise ke ${esc(tplT)}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div><h2 style="margin:0">Template</h2><div class="mut">Buat template sendiri dan atur exercise sesuka kamu.</div></div>
+        <button onclick="newTemplate()">+ Template</button>
+      </div>
+      <div class="chips">${names.map(t=>`<button class="chip ${t===tplT?'on':''}" onclick="tplT='${esc(t).replace(/'/g,"\\'")}';render()">${esc(t)}</button>`).join('')}</div>
+      ${tplT?`<div class="row" style="margin-top:8px"><b>${esc(tplT)}</b><span><button class="x" onclick="renameTemplate()">✎</button><button class="x" onclick="deleteTemplate()">🗑</button></span></div>`:''}
+      <div style="margin-top:8px">
+        ${l.map((e,i)=>`<div class="row"><span>${esc(e)}</span><button class="x" onclick="tplRm(${i})">×</button></div>`).join('')||'<p class="mut">Template kosong. Tambahkan exercise di bawah.</p>'}
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <input id="tn" list="dl" placeholder="Nama exercise" onkeydown="if(event.key==='Enter'){event.preventDefault();tplAdd()}">
         <button onclick="tplAdd()">Tambah</button>
       </div>
     </div>`;
+}
+
+function newTemplate(){
+  const name=prompt('Nama template baru:');
+  if(!name)return;
+  const n=name.trim();
+  if(!n)return;
+  if(S.tpl[n])return alert('Template dengan nama itu sudah ada.');
+  S.tpl[n]=[];
+  S.tplNames.push(n);
+  tplT=n;
+  save();render();
+}
+function renameTemplate(){
+  if(!tplT)return;
+  const name=prompt('Nama template baru:',tplT);
+  if(!name)return;
+  const n=name.trim();
+  if(!n||n===tplT)return;
+  if(S.tpl[n])return alert('Nama template sudah dipakai.');
+  S.tpl[n]=S.tpl[tplT];
+  delete S.tpl[tplT];
+  const i=S.tplNames.indexOf(tplT); if(i>=0)S.tplNames[i]=n;
+  tplT=n; save(); render();
+}
+function deleteTemplate(){
+  if(!tplT)return;
+  if(S.tplNames.length<=1)return alert('Minimal harus ada satu template.');
+  if(!confirm(`Hapus template "${tplT}"?`))return;
+  delete S.tpl[tplT];
+  S.tplNames=S.tplNames.filter(x=>x!==tplT);
+  tplT=S.tplNames[0];
+  save();render();
 }
 
 function act(){
@@ -594,35 +634,53 @@ function act(){
 }
 
 function hist(){
-  const ws=wsorted().reverse().filter(w=>
-    (!hf.t||w.type===hf.t)&&(!hf.m||monthKey(w.date)===hf.m)
-  );
+  const ws=wsorted().reverse().filter(w=>(!hf.t||w.type===hf.t)&&(!hf.m||monthKey(w.date)===hf.m));
   const inM=S.workouts.filter(w=>!hf.m||monthKey(w.date)===hf.m);
-
-  return `
-    <h2>History</h2>
+  const types=[...new Set([...tplList(),...S.workouts.map(w=>w.type)])];
+  return `<h2>History</h2>
     <input type="month" value="${esc(hf.m)}" onchange="hf.m=this.value;render()">
-    <div class="chips">
-      <button class="chip ${!hf.t?'on':''}" onclick="hf.t='';render()">Semua</button>
-      ${TYPES.map(t=>`<button data-t="${t}" class="chip ${hf.t===t?'on':''}" onclick="hf.t='${t}';render()">${t}</button>`).join('')}
-    </div>
-    <div class="card">
-      ${TYPES.map(t=>`<div class="row"><span>${t}</span><b>${inM.filter(w=>w.type===t).length} workouts</b></div>`).join('')}
-    </div>
+    <div class="chips"><button class="chip ${!hf.t?'on':''}" onclick="hf.t='';render()">Semua</button>${types.map(t=>`<button class="chip ${hf.t===t?'on':''}" onclick="hf.t='${esc(t).replace(/'/g,"\\'")}';render()">${esc(t)}</button>`).join('')}</div>
+    <div class="card">${types.map(t=>`<div class="row"><span>${esc(t)}</span><b>${inM.filter(w=>w.type===t).length} workouts</b></div>`).join('')}</div>
     ${ws.map(w=>{
-      const ss=S.sets.filter(s=>s.wid===w.id);
-      const ex=[...new Set(ss.map(s=>s.ex))];
-      return `
-        <div class="card hc" data-t="${esc(w.type)}">
-          <b>${fd(w.date)}</b><span class="bd">${esc(w.type)}</span>
-          <div class="mut">${w.dur} menit · Total ${fmt(w.vol)} kg</div>
-          ${ex.map(e=>`
-            <p style="margin-top:6px"><b>${esc(e)}</b><br>
-            ${ss.filter(s=>s.ex===e).map(s=>`${num(s.w)} × ${num(s.r)}`).join('<br>')}</p>
-          `).join('')}
-          ${w.notes?`<p class="mut" style="margin-top:6px">${esc(w.notes)}</p>`:''}
-        </div>`;
-    }).join('')||'<div class="empty">Tidak ada workout.</div>'}`;
+      const ss=S.sets.filter(s=>s.wid===w.id); const ex=[...new Set(ss.map(s=>s.ex))];
+      return `<div class="card hc" data-t="${esc(w.type)}">
+        <div class="row"><span><b>${fd(w.date)}</b><span class="bd">${esc(w.type)}</span></span><span><button class="x" onclick="editWorkout('${esc(w.id)}')">✎</button><button class="x" onclick="deleteWorkout('${esc(w.id)}')">🗑</button></span></div>
+        <div class="mut">${w.dur} menit · Total ${fmt(w.vol)} kg</div>
+        ${ex.map(e=>`<p style="margin-top:6px"><b>${esc(e)}</b><br>${ss.filter(s=>s.ex===e).map(s=>`${s.w} × ${s.r}${s.rpe!==''?' · RPE '+s.rpe:''}`).join('<br>')}</p>`).join('')}
+        ${w.notes?`<p class="mut" style="margin-top:8px">${esc(w.notes)}</p>`:''}
+      </div>`;
+    }).join('')||'<p class="mut">Tidak ada workout.</p>'}`;
+}
+
+function editWorkout(id){
+  const w=S.workouts.find(x=>x.id===id); if(!w)return;
+  const ss=S.sets.filter(s=>s.wid===id);
+  const names=[...new Set(ss.map(s=>s.ex))];
+  S.active={type:w.type,date:dateOnly(w.date),start:Date.now()-Math.max(1,Number(w.dur)||1)*60000,notes:w.notes||'',editId:id,ex:names.map(name=>({name,notes:ss.find(s=>s.ex===name)?.notes||'',sets:ss.filter(s=>s.ex===name).sort((a,b)=>a.n-b.n).map(s=>({w:s.w,r:s.r,rpe:s.rpe}))}))};
+  save();tab='workout';render();scrollTo(0,0);
+}
+
+function deleteWorkout(id){
+  const w=S.workouts.find(x=>x.id===id); if(!w)return;
+  if(!confirm(`Hapus workout ${fd(w.date)}?`))return;
+  S.workouts=S.workouts.filter(x=>x.id!==id);
+  S.sets=S.sets.filter(x=>x.wid!==id);
+  S.prs=[]; rebuildPR(); save();
+  if(S.url){S.q.push({sheet:'DELETE_WORKOUT',rows:[[id]]});save();sync();}
+  render();
+}
+function rebuildPR(){
+  const prs=[]; const best={};
+  [...S.workouts].sort((a,b)=>dateOnly(a.date).localeCompare(dateOnly(b.date))).forEach(w=>{
+    S.sets.filter(s=>s.wid===w.id).forEach(s=>{
+      const key=s.ex; if(!best[key])best[key]={w:0,r:0,v:0};
+      const weight=Number(s.w)||0,reps=Number(s.r)||0,volume=Number(s.vol)||weight*reps;
+      if(weight>best[key].w){best[key].w=weight;prs.push({date:dateOnly(w.date),ex:s.ex,type:'Maximum Weight',w:weight,r:reps,vol:volume});}
+      if(reps>best[key].r){best[key].r=reps;prs.push({date:dateOnly(w.date),ex:s.ex,type:'Maximum Reps',w:weight,r:reps,vol:volume});}
+      if(volume>best[key].v){best[key].v=volume;prs.push({date:dateOnly(w.date),ex:s.ex,type:'Maximum Volume',w:weight,r:reps,vol:volume});}
+    });
+  });
+  S.prs=prs;
 }
 
 function prog(){
@@ -778,16 +836,12 @@ function up(i,j,k,v){
 }
 
 function tplAdd(){
-  const el=$('#tn');
-  if(!el)return;
-  const v=el.value.trim();
-  if(!v)return;
+  const el=$('#tn'); if(!el||!tplT)return;
+  const v=el.value.trim(); if(!v)return;
   S.tpl[tplT]=S.tpl[tplT]||[];
-  if(!S.tpl[tplT].some(x=>x.toLowerCase()===v.toLowerCase())){
-    S.tpl[tplT].push(ensureEx(v));
-  }
-  save();
-  render();
+  const name=ensureEx(v);
+  if(!S.tpl[tplT].some(x=>x.toLowerCase()===name.toLowerCase())) S.tpl[tplT].push(name);
+  el.value=''; save(); render();
 }
 
 function tplRm(i){
@@ -805,8 +859,14 @@ function finish(){
 
   if(!exs.length)return alert('Isi minimal satu set (berat dan reps).');
 
-  const wid=newWid();
+  const editing=!!a.editId;
+  const oldId=a.editId;
+  const wid=editing?oldId:newWid();
   const dur=Math.max(1,Math.round((Date.now()-a.start)/60000));
+  if(editing){
+    S.workouts=S.workouts.filter(x=>x.id!==oldId);
+    S.sets=S.sets.filter(x=>x.wid!==oldId);
+  }
   const prs=[];
   const rows=[];
   let tv=0,sn=0;
@@ -860,7 +920,7 @@ function finish(){
 
   const w={id:wid,date:a.date,type:a.type,dur,vol:tv,notes:a.notes};
   S.workouts.push(w);
-  S.prs.push(...prs.map(({pw,pr,...p})=>p));
+  S.prs=[]; rebuildPR();
   S.active=null;
   save();
 
