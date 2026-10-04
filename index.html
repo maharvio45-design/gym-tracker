@@ -31,7 +31,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .wk span{width:36px;height:36px;border-radius:50%;background:#ffffff26;display:grid;place-items:center;font-weight:600;font-size:13px;color:#ffffffcc}
 .wk span.on{background:var(--tc);color:#fff;box-shadow:0 0 0 2px #fff}
 .go{background:#fff;color:var(--ac);width:100%;margin-top:16px;font:700 20px 'Barlow Condensed',sans-serif;padding:14px;border-radius:14px}
-.ah{background:var(--tc);color:#fff;border-radius:20px;padding:16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end}.ah .big{font-size:42px}
+.ah{background:var(--tc,var(--ac));color:#fff;border-radius:20px;padding:16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end}.ah .big{font-size:42px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .chip{background:#fff;color:var(--ink);padding:8px 14px;border-radius:99px}
 .chip[data-t]{box-shadow:inset 0 -3px 0 var(--tc)}
@@ -56,7 +56,7 @@ nav button.on{background:#ffffff24;color:#fff}
 .mod>div{background:#fff;width:100%;max-width:560px;margin:auto auto 0;border-radius:24px 24px 0 0;padding:18px;max-height:88vh;overflow:auto}
 .ch{width:100%;height:auto}
 .pr{background:#FFF4CC;border:1px solid #F5B700;color:#6b5000;font-weight:600}
-.t5{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}.t5 button{background:var(--tc);font:700 22px 'Barlow Condensed',sans-serif;padding:20px;border-radius:18px}.t5 button:first-child{grid-column:span 2}
+.t5{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}.t5 button{background:var(--tc,var(--ac));font:700 22px 'Barlow Condensed',sans-serif;padding:20px;border-radius:18px}.t5 button:first-child{grid-column:span 2}
 label{display:block;margin-top:8px}
 /* ---------- Custom dialogs ---------- */
 .dialog-backdrop{position:fixed;inset:0;background:rgba(20,18,43,.58);display:flex;align-items:flex-end;justify-content:center;z-index:50;padding:14px}
@@ -88,6 +88,7 @@ label{display:block;margin-top:8px}
 <main id="app"></main>
 <nav id="nav"></nav>
 <datalist id="dl"></datalist>
+<div id="dialogRoot" aria-live="polite"></div>
 
 <script>
 'use strict';
@@ -119,14 +120,23 @@ const pad=n=>String(n).padStart(2,'0');
 const slug=n=>String(n).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-/* ---------- Native-dialog replacement ---------- */
-function closeDialog(){const r=$('#dialogRoot');if(r)r.innerHTML=''}
+/* ---------- Custom dialog system ---------- */
+let dialogOk=null;
+let dialogInputHandler=null;
+
+function closeDialog(){
+  const r=$('#dialogRoot');
+  if(r)r.innerHTML='';
+  dialogOk=null;
+  dialogInputHandler=null;
+}
+
 function dialogShell(title,sub,body,actions){
   const r=$('#dialogRoot');
   if(!r)return;
   r.innerHTML=`<div class="dialog-backdrop" id="appDialogBackdrop">
-    <div class="dialog" role="dialog" aria-modal="true">
-      <h3>${esc(title)}</h3>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+      <h3 id="dialogTitle">${esc(title)}</h3>
       ${sub?`<div class="dialog-sub">${esc(sub)}</div>`:''}
       ${body}
       <div class="dialog-actions">${actions}</div>
@@ -135,26 +145,56 @@ function dialogShell(title,sub,body,actions){
   const b=$('#appDialogBackdrop');
   if(b)b.addEventListener('click',e=>{if(e.target===b)closeDialog()});
 }
+
 function uiAlert(message,title='Gym Log'){
-  dialogShell(title,'',`<div style="font-size:15px;white-space:pre-line">${esc(message)}</div>`,`<button class="cancel" onclick="closeDialog()">OK</button><button class="primary" onclick="closeDialog()">Mengerti</button>`);
+  dialogOk=null;
+  dialogShell(title,'',`<div style="font-size:15px;white-space:pre-line">${esc(message)}</div>`,
+    `<button class="primary" style="grid-column:1/-1" onclick="closeDialog()">Mengerti</button>`);
 }
+
 function uiConfirm(message,onOk,title='Konfirmasi'){
-  dialogShell(title,'',`<div style="font-size:15px;white-space:pre-line">${esc(message)}</div>`,`<button class="cancel" onclick="closeDialog()">Batal</button><button class="danger" onclick="closeDialog();(${onOk.toString()})()">Lanjutkan</button>`);
+  dialogOk=typeof onOk==='function'?onOk:null;
+  dialogShell(title,'',`<div style="font-size:15px;white-space:pre-line">${esc(message)}</div>`,
+    `<button class="cancel" onclick="closeDialog()">Batal</button><button class="danger" onclick="dialogConfirmSubmit()">Lanjutkan</button>`);
 }
+
+function dialogConfirmSubmit(){
+  const fn=dialogOk;
+  closeDialog();
+  if(fn)fn();
+}
+
 function uiPrompt(title,sub,value,onOk,placeholder='Ketik di sini…'){
-  dialogShell(title,sub,`<label class="k">Nama</label><input id="dialogInput" value="${esc(value||'')}" placeholder="${esc(placeholder)}" autocomplete="off">`,`<button class="cancel" onclick="closeDialog()">Batal</button><button class="primary" onclick="dialogSubmit()">Simpan</button>`);
-  window.__dialogSubmit=onOk;
-  setTimeout(()=>{const i=$('#dialogInput');if(i){i.focus();i.select();i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();dialogSubmit()}})}},20);
+  dialogOk=typeof onOk==='function'?onOk:null;
+  dialogShell(title,sub,
+    `<label class="k" for="dialogInput">Nama</label><input id="dialogInput" value="${esc(value||'')}" placeholder="${esc(placeholder)}" autocomplete="off" enterkeyhint="done">`,
+    `<button class="cancel" onclick="closeDialog()">Batal</button><button class="primary" onclick="dialogSubmit()">Simpan</button>`);
+  setTimeout(()=>{
+    const i=$('#dialogInput');
+    if(i){
+      i.focus();
+      i.select();
+      i.addEventListener('keydown',e=>{
+        if(e.key==='Enter'){e.preventDefault();dialogSubmit()}
+        if(e.key==='Escape'){e.preventDefault();closeDialog()}
+      });
+    }
+  },30);
 }
+
 function dialogSubmit(){
   const i=$('#dialogInput');
   const v=i?i.value.trim():'';
-  if(!v)return;
-  const fn=window.__dialogSubmit;
-  window.__dialogSubmit=null;
+  if(!v){i?.focus();return}
+  const fn=dialogOk;
   closeDialog();
   if(fn)fn(v);
 }
+
+addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&$('#appDialogBackdrop'))closeDialog();
+});
+
 const today=()=>iso(new Date());
 
 /* ---------- Robust date handling ---------- */
@@ -381,6 +421,8 @@ function normalizeBodyRow(r){
 }
 
 async function pull(){
+  const cfgModal=$('#cfg');
+  if(cfgModal)cfgModal.remove();
   if(!S.url){uiAlert('Masukkan URL Web App terlebih dahulu.','Google Sheets');return;}
 
   await sync();
@@ -437,6 +479,8 @@ async function pull(){
 }
 
 function cfg(){
+  const old=$('#cfg');
+  if(old){old.remove();return;}
   const m=document.createElement('div');
   m.className='mod';
   m.id='cfg';
@@ -592,23 +636,43 @@ function dash(){
     <div class="card"><div class="k">Grafik lingkar pinggang</div>${chart(wa.map(b=>({v:b.waist})),' cm')}</div>`;
 }
 
-function customTemplates(){return Object.keys(S.tpl).filter(t=>!TYPES.includes(t));}
+function customTemplates(){
+  return Object.keys(S.tpl).filter(t=>!TYPES.includes(t));
+}
+
+function allTemplates(){
+  return [...TYPES,...customTemplates()];
+}
+
+function tplSelect(name){
+  if(!S.tpl[name])return;
+  tplT=name;
+  save();
+  render();
+}
+
+function startTemplate(name){
+  if(!S.tpl[name])return;
+  start(name);
+}
 
 function workout(){
   if(S.active)return act();
   const l=S.tpl[tplT]||[];
   const customs=customTemplates();
+  const templates=allTemplates();
   return `
     <h2>Pilih workout</h2>
-    <div class="t5">${TYPES.map(t=>`<button data-t="${esc(t)}" onclick="start('${esc(t)}')">${esc(t)}</button>`).join('')}</div>
+    <div class="t5">
+      ${templates.map(t=>`<button data-t="${esc(t)}" data-start-template="1" onclick="startTemplate(this.dataset.t)">${esc(t)}</button>`).join('')}
+    </div>
     <h2>Template</h2>
     <div class="tpl-tools">
       <button class="primary" style="background:var(--ac)" onclick="tplNew()">＋ Template Baru</button>
       ${!TYPES.includes(tplT)?`<button class="secondary" onclick="tplRename()">✎ Rename</button><button class="secondary" onclick="tplDelete()">🗑 Hapus</button>`:''}
     </div>
     <div class="tpl-list">
-      ${TYPES.map(t=>`<button data-t="${esc(t)}" class="chip ${t===tplT?'on':''}" onclick="tplT='${esc(t)}';render()">${esc(t)}</button>`).join('')}
-      ${customs.map(t=>`<button class="chip ${t===tplT?'on':''}" onclick="tplT='${esc(t)}';render()">${esc(t)}</button>`).join('')}
+      ${templates.map(t=>`<button data-t="${esc(t)}" class="chip ${t===tplT?'on':''}" onclick="tplSelect(this.dataset.t)">${esc(t)}</button>`).join('')}
     </div>
     <div class="card">
       <div class="row"><b>${esc(tplT)}</b><span class="mut">${l.length} exercise</span></div>
@@ -645,7 +709,7 @@ function act(){
 
     <div class="card">
       <div style="display:flex;gap:6px">
-        <input id="nx" list="dl" placeholder="Nama exercise">
+        <input id="nx" list="dl" placeholder="Nama exercise" onkeydown="if(event.key==='Enter'){event.preventDefault();addEx()}">
         <button onclick="addEx()">Add</button>
       </div>
       <button class="ghost" onclick="addEx()">+ Add Exercise</button>
@@ -804,12 +868,13 @@ function ensureEx(n){
 
 function addEx(){
   const el=$('#nx');
-  if(!el)return;
+  if(!el||!S.active)return;
   const v=el.value.trim();
   if(!v)return;
   S.active.ex.push(blank(ensureEx(v)));
   save();
   render();
+  setTimeout(()=>{const n=$('#nx');if(n)n.focus()},0);
 }
 
 function addSet(i){
@@ -840,9 +905,14 @@ function up(i,j,k,v){
   if(el)el.textContent=vol(S.active.ex[i].sets[j]);
 }
 
+function templateNameExists(name,except=''){
+  const n=name.trim().toLowerCase();
+  return allTemplates().some(t=>t!==except && t.toLowerCase()===n);
+}
+
 function tplNew(){
   uiPrompt('Template Baru','Buat template workout yang bisa kamu gunakan kapan saja.','',name=>{
-    if(TYPES.some(t=>t.toLowerCase()===name.toLowerCase())||customTemplates().some(t=>t.toLowerCase()===name.toLowerCase())){
+    if(templateNameExists(name)){
       uiAlert('Nama template sudah digunakan. Pilih nama lain.','Template sudah ada');
       return;
     }
@@ -850,31 +920,43 @@ function tplNew(){
     tplT=name;
     save();
     render();
+    toast(`Template "${name}" dibuat.`);
   },'Contoh: FULL BODY');
 }
 
 function tplRename(){
-  if(TYPES.includes(tplT))return uiAlert('Template bawaan tidak bisa di-rename. Buat template baru jika ingin nama sendiri.');
+  if(TYPES.includes(tplT)){
+    uiAlert('Template bawaan tidak bisa di-rename. Buat template baru jika ingin nama sendiri.');
+    return;
+  }
   const old=tplT;
   uiPrompt('Rename Template','Ganti nama template ini.',old,name=>{
     if(name===old)return;
-    if(S.tpl[name]||TYPES.some(t=>t.toLowerCase()===name.toLowerCase()))return uiAlert('Nama template sudah digunakan.');
+    if(templateNameExists(name,old)){
+      uiAlert('Nama template sudah digunakan.','Template sudah ada');
+      return;
+    }
     S.tpl[name]=S.tpl[old]||[];
     delete S.tpl[old];
     tplT=name;
     save();
     render();
+    toast(`Template diubah menjadi "${name}".`);
   },'Nama template');
 }
 
 function tplDelete(){
-  if(TYPES.includes(tplT))return uiAlert('Template bawaan tidak bisa dihapus.');
+  if(TYPES.includes(tplT)){
+    uiAlert('Template bawaan tidak bisa dihapus.');
+    return;
+  }
   const old=tplT;
-  uiConfirm(`Hapus template "${old}"? Exercise di template ini juga akan dihapus dari template, tetapi riwayat workout tidak akan terhapus.`,()=>{
+  uiConfirm(`Hapus template "${old}"? Riwayat workout tidak akan terhapus.`,()=>{
     delete S.tpl[old];
     tplT=TYPES[0];
     save();
     render();
+    toast(`Template "${old}" dihapus.`);
   },'Hapus Template');
 }
 
@@ -1063,4 +1145,5 @@ sync();
 </script>
 </body>
 </html>
+
 
