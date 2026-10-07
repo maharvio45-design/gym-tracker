@@ -1199,6 +1199,14 @@ setInterval(sync,30000);
 
 render();
 sync();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(() => console.log('Gym Log PWA aktif'))
+      .catch(err => console.error('PWA error:', err));
+  });
+}
 </script>
 </body>
 </html>
